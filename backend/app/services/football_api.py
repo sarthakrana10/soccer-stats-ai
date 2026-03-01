@@ -67,6 +67,11 @@ class FootballAPIClient:
             {"team": team_id, "league": league_id, "season": season},
         )
 
+    async def get_fixture_players(self, fixture_id: int) -> dict:
+        return await self._get(
+            "/fixtures/players", {"fixture": fixture_id}
+        )
+
     async def get_head_to_head(self, team1_id: int, team2_id: int) -> dict:
         return await self._get(
             "/fixtures/headtohead",

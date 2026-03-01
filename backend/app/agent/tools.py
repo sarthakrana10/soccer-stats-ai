@@ -1,4 +1,5 @@
 import asyncio
+import pandas as pd
 from langchain_core.tools import tool
 
 from app.services.football_api import FootballAPIClient, FootballAPIError
@@ -73,8 +74,8 @@ def search_player(name: str, league_name: str = "Premier League") -> str:
 
 @tool
 def get_player_recent_matches(player_name: str, last_n: int = 5, league_name: str = "Premier League") -> str:
-    """Get a player's team results from their last N matches (default 5) plus season totals.
-    Shows date, home/away, opponent, and result for each game.
+    """Get a player's individual stats (goals, assists, minutes) for their last N matches (default 5).
+    Shows per-match breakdown with date, opponent, goals, assists, and minutes played.
     Use league_name to specify the league if the player is not in the Premier League.
     """
     client = FootballAPIClient()
@@ -93,30 +94,74 @@ def get_player_recent_matches(player_name: str, last_n: int = 5, league_name: st
         fixture_data = _run(
             client.get_team_fixtures(team_id, league_id, CURRENT_SEASON)
         )
-        stats_data = _run(
-            client.get_player_stats(player_id, league_id, CURRENT_SEASON)
-        )
     except FootballAPIError as e:
         return f"API error: {e}"
 
     df = process_team_fixtures(fixture_data, team_id)
     if df.empty:
         return f"No match data found for {team_name} this season."
-    df = df.head(last_n)
+    # Get fixture IDs for the last N matches
+    fixtures_sorted = sorted(
+        fixture_data.get("response", []),
+        key=lambda f: f["fixture"]["date"],
+        reverse=True,
+    )
+    recent_fixtures = fixtures_sorted[:last_n]
 
-    season_df = process_player_season_stats(stats_data)
-    season_line = ""
-    if not season_df.empty:
-        row = season_df.iloc[0]
-        season_line = (
-            f"\n\n**{player['name']} 2024-25 season totals:** "
-            f"{int(row['Goals'])} goals, {int(row['Assists'])} assists in {int(row['Appearances'])} appearances"
-        )
+    # Fetch per-match player stats
+    rows = []
+    for fix in recent_fixtures:
+        fix_id = fix["fixture"]["id"]
+        date = fix["fixture"]["date"][:10]
+        home_id = fix["teams"]["home"]["id"]
+        home_name = fix["teams"]["home"]["name"]
+        away_name = fix["teams"]["away"]["name"]
+        home_goals = fix["goals"].get("home") or 0
+        away_goals = fix["goals"].get("away") or 0
+
+        if team_id == home_id:
+            opponent = away_name
+            venue = "H"
+            gf, ga = home_goals, away_goals
+        else:
+            opponent = home_name
+            venue = "A"
+            gf, ga = away_goals, home_goals
+        result = "W" if gf > ga else ("D" if gf == ga else "L")
+
+        # Get individual player stats for this fixture
+        p_goals, p_assists, p_minutes = 0, 0, 0
+        try:
+            fix_players = _run(client.get_fixture_players(fix_id))
+            for team_data in fix_players.get("response", []):
+                for p in team_data.get("players", []):
+                    if p["player"]["id"] == player_id:
+                        stat = p["statistics"][0]
+                        p_goals = stat.get("goals", {}).get("total") or 0
+                        p_assists = stat.get("goals", {}).get("assists") or 0
+                        p_minutes = stat.get("games", {}).get("minutes") or 0
+                        break
+        except FootballAPIError:
+            pass
+
+        rows.append({
+            "Date": date,
+            "H/A": venue,
+            "Opponent": opponent,
+            "Result": f"{result} {gf}-{ga}",
+            "Goals": p_goals,
+            "Assists": p_assists,
+            "Minutes": p_minutes,
+        })
+
+    match_df = pd.DataFrame(rows)
+    total_goals = match_df["Goals"].sum()
+    total_assists = match_df["Assists"].sum()
 
     return (
-        f"**{player['name']} ({team_name}) — last {len(df)} matches**\n\n"
-        f"{dataframe_to_markdown(df)}"
-        f"{season_line}"
+        f"**{player['name']} ({team_name}) — last {len(match_df)} matches**\n\n"
+        f"{dataframe_to_markdown(match_df)}\n\n"
+        f"**Totals: {total_goals} goals, {total_assists} assists in {len(match_df)} matches**"
     )
 
 
