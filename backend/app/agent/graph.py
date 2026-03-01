@@ -1,4 +1,4 @@
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_nvidia_ai_endpoints import ChatNVIDIA
 from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode
 
@@ -9,9 +9,9 @@ from app.config import settings
 
 
 def build_graph():
-    llm = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash",
-        google_api_key=settings.google_api_key,
+    llm = ChatNVIDIA(
+        model="moonshotai/kimi-k2.5",
+        api_key=settings.nvidia_api_key,
     ).bind_tools(ALL_TOOLS)
 
     tool_node = ToolNode(ALL_TOOLS)
@@ -19,6 +19,9 @@ def build_graph():
     def agent_node(state: AgentState):
         messages = [{"role": "system", "content": SYSTEM_PROMPT}] + state["messages"]
         response = llm.invoke(messages)
+        # Kimi K2.5 sometimes puts the answer in reasoning_content instead of content
+        if not response.content and response.additional_kwargs.get("reasoning_content"):
+            response.content = response.additional_kwargs["reasoning_content"]
         tools_used = state.get("tools_used", [])
         if response.tool_calls:
             tools_used = tools_used + [tc["name"] for tc in response.tool_calls]
