@@ -5,48 +5,33 @@ def dataframe_to_markdown(df: pd.DataFrame) -> str:
     return df.to_markdown(index=False)
 
 
-def process_player_fixtures(raw_json: dict, player_id: int) -> pd.DataFrame:
-    """Extract per-match stats for a specific player from fixture responses."""
+def process_team_fixtures(raw_json: dict, team_id: int) -> pd.DataFrame:
+    """Extract match results from team fixture responses, from the team's perspective."""
     rows = []
     for fixture in raw_json.get("response", []):
         date = fixture["fixture"]["date"][:10]
+        home_id = fixture["teams"]["home"]["id"]
         home = fixture["teams"]["home"]["name"]
         away = fixture["teams"]["away"]["name"]
-        home_goals = fixture["goals"]["home"]
-        away_goals = fixture["goals"]["away"]
+        home_goals = fixture["goals"].get("home") or 0
+        away_goals = fixture["goals"].get("away") or 0
 
-        # Find the player's stats within this fixture
-        player_stats = None
-        for team_block in fixture.get("players", []):
-            for p in team_block.get("players", []):
-                if p["player"]["id"] == player_id:
-                    player_stats = p["statistics"][0]
-                    player_team_id = team_block["team"]["id"]
-                    break
-            if player_stats:
-                break
-
-        if not player_stats:
-            continue
-
-        # Determine opponent and result from the player's team perspective
-        home_team_id = fixture["teams"]["home"]["id"]
-        if player_team_id == home_team_id:
+        if team_id == home_id:
             opponent = away
             gf, ga = home_goals, away_goals
+            venue = "H"
         else:
             opponent = home
             gf, ga = away_goals, home_goals
+            venue = "A"
 
         result = "W" if gf > ga else ("D" if gf == ga else "L")
 
         rows.append({
             "Date": date,
+            "H/A": venue,
             "Opponent": opponent,
             "Result": f"{result} {gf}-{ga}",
-            "Goals": player_stats["goals"]["total"] or 0,
-            "Assists": player_stats["goals"]["assists"] or 0,
-            "Minutes": player_stats["games"]["minutes"] or 0,
         })
 
     df = pd.DataFrame(rows)

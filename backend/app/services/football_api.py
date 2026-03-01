@@ -12,8 +12,7 @@ class FootballAPIError(Exception):
 class FootballAPIClient:
     def __init__(self):
         self._headers = {
-            "x-rapidapi-key": settings.rapidapi_key,
-            "x-rapidapi-host": "v3.football.api-sports.io",
+            "x-apisports-key": settings.api_football_key,
         }
 
     async def _get(self, endpoint: str, params: dict) -> dict:
@@ -27,15 +26,15 @@ class FootballAPIClient:
                 raise FootballAPIError(str(data["errors"]))
             return data
 
-    async def search_player(self, name: str) -> dict:
-        return await self._get("/players", {"search": name})
+    async def search_player(self, name: str, league_id: int = 39, season: int = 2024) -> dict:
+        return await self._get("/players", {"search": name, "league": league_id, "season": season})
 
-    async def get_player_fixtures(
-        self, player_id: int, league_id: int, season: int
+    async def get_team_fixtures(
+        self, team_id: int, league_id: int, season: int
     ) -> dict:
         return await self._get(
             "/fixtures",
-            {"player": player_id, "league": league_id, "season": season},
+            {"team": team_id, "league": league_id, "season": season},
         )
 
     async def get_player_stats(
