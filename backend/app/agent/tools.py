@@ -47,13 +47,14 @@ def _run(coro):
 
 
 @tool
-def search_player(name: str) -> str:
+def search_player(name: str, league_name: str = "Premier League") -> str:
     """Search for a player by name. Returns their ID, team, and position.
-    Use this first whenever you need a player's ID for other tools.
+    Use league_name to search in a specific league (e.g. 'La Liga' for Spanish players).
     """
     client = FootballAPIClient()
+    league_id = _resolve_league(league_name)
     try:
-        data = _run(client.search_player(name))
+        data = _run(client.search_player(name, league_id=league_id, season=CURRENT_SEASON))
     except FootballAPIError as e:
         return f"API error: {e}"
 
@@ -71,16 +72,18 @@ def search_player(name: str) -> str:
 
 
 @tool
-def get_player_recent_matches(player_name: str, last_n: int = 5) -> str:
+def get_player_recent_matches(player_name: str, last_n: int = 5, league_name: str = "Premier League") -> str:
     """Get a player's team results from their last N matches (default 5) plus season totals.
     Shows date, home/away, opponent, and result for each game.
+    Use league_name to specify the league if the player is not in the Premier League.
     """
     client = FootballAPIClient()
+    league_id = _resolve_league(league_name)
     try:
-        search_data = _run(client.search_player(player_name, league_id=DEFAULT_LEAGUE_ID, season=CURRENT_SEASON))
+        search_data = _run(client.search_player(player_name, league_id=league_id, season=CURRENT_SEASON))
         results = search_data.get("response", [])
         if not results:
-            return f"No player found matching '{player_name}'."
+            return f"No player found matching '{player_name}' in {league_name}."
 
         player = results[0]["player"]
         player_id = player["id"]
@@ -88,10 +91,10 @@ def get_player_recent_matches(player_name: str, last_n: int = 5) -> str:
         team_name = results[0]["statistics"][0]["team"]["name"]
 
         fixture_data = _run(
-            client.get_team_fixtures(team_id, DEFAULT_LEAGUE_ID, CURRENT_SEASON)
+            client.get_team_fixtures(team_id, league_id, CURRENT_SEASON)
         )
         stats_data = _run(
-            client.get_player_stats(player_id, DEFAULT_LEAGUE_ID, CURRENT_SEASON)
+            client.get_player_stats(player_id, league_id, CURRENT_SEASON)
         )
     except FootballAPIError as e:
         return f"API error: {e}"
