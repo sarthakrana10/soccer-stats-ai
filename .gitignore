@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+venv/
+.venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# Environment
+.env
+
+# Node
+node_modules/
+build/
+dist/
+
+# OS
+.DS_Store
+
+# Project meta (local only)
+CLAUDE.md
+soccer-stats-ai-requirements.md
